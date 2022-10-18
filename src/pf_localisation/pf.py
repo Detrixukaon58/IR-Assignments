@@ -35,7 +35,7 @@ class PFLocaliser(PFLocaliserBase):
 
     def map_position_checker(self,x,y):
         cell_x=int(x/self.occupancy_map.info.resolution)
-        cell_y=int(y/self.occupancy_map.info.resolution)
+        cell_y=y/self.occupancy_map.info.resolution
         width=self.occupancy_map.info.width
         height=self.occupancy_map.info.height
 
