@@ -24,7 +24,9 @@ class PFLocaliser(PFLocaliserBase):
         
         # ----- Sensor model parameters
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
-        
+    
+    def checkParticlePose(particle):
+        return True
        
     def initialise_particle_cloud(self, initialpose):
         """
@@ -52,8 +54,12 @@ class PFLocaliser(PFLocaliserBase):
             new_partical.position.x=initial_x+gauss(0,1)*self.INITIAL_NOISE_X
             new_partical.position.y=initial_y+gauss(0,1)*self.INITIAL_NOISE_Y
             new_partical.orientation=rotateQuaternion(initial_theta, gauss(0,1)*self.INITIAL_NOISE_THETA*math.pi/180)
-            pose_array.poses.append(new_partical)
-        
+            is_valid = checkParticlePose(new_partical)
+            if(is_valid):
+                pose_array.poses.append(new_partical)
+            else:
+                continue
+
         
         return pose_array
 
