@@ -1,3 +1,5 @@
+from re import T
+import turtle
 from geometry_msgs.msg import Pose, PoseArray, Quaternion
 from . pf_base import PFLocaliserBase
 import math
@@ -15,17 +17,35 @@ class PFLocaliser(PFLocaliserBase):
         # ----- Call the superclass constructor
         super(PFLocaliser, self).__init__()
         
+        # -----  Odometry Parameters
+        self.ODOM_ROTATION_NOISE = 0 		# Odometry model rotation noise
+        self.ODOM_TRANSLATION_NOISE = 0 	# Odometry x axis (forward) noise
+        self.ODOM_DRIFT_NOISE = 0 			# Odometry y axis (side-side) noise
+
         # ----- Set motion model parameters
         self.NUMBER_OF_PARTICALS=200
 
-        self.INITIAL_NOISE_X=1
-        self.INITIAL_NOISE_Y=2
+        self.INITIAL_NOISE_X=0.3
+        self.INITIAL_NOISE_Y=0.3
         self.INITIAL_NOISE_THETA=180
         
         # ----- Sensor model parameters
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
-        
-       
+        self.OCCUPANCY_THRESHOLD=70
+
+    def map_position_checker(self,x,y):
+        cell_x=int(x/self.occupancy_map.info.resolution)
+        cell_y=int(y/self.occupancy_map.info.resolution)
+        width=self.occupancy_map.info.width
+        height=self.occupancy_map.info.height
+
+        if cell_x>width or cell_x<0 or cell_y>height or cell_y <0:
+            return False
+        if self.occupancy_map.data[cell_x+cell_y*width] > self.OCCUPANCY_THRESHOLD:
+            return False
+        return True
+
+
     def initialise_particle_cloud(self, initialpose):
         """
         Set particle cloud to initialpose plus noise
@@ -49,8 +69,12 @@ class PFLocaliser(PFLocaliserBase):
         pose_array=PoseArray()
         for i in range(self.NUMBER_OF_PARTICALS):
             new_partical=Pose()
-            new_partical.position.x=initial_x+gauss(0,1)*self.INITIAL_NOISE_X
-            new_partical.position.y=initial_y+gauss(0,1)*self.INITIAL_NOISE_Y
+            while(True):
+                new_partical.position.x=initial_x+gauss(0,1)*self.INITIAL_NOISE_X
+                new_partical.position.y=initial_y+gauss(0,1)*self.INITIAL_NOISE_Y
+                if self.map_position_checker(new_partical.position.x,new_partical.position.y):
+                    break
+        
             new_partical.orientation=rotateQuaternion(initial_theta, gauss(0,1)*self.INITIAL_NOISE_THETA*math.pi/180)
             pose_array.poses.append(new_partical)
         
