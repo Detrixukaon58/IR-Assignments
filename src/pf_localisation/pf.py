@@ -43,7 +43,7 @@ class PFLocaliser(PFLocaliserBase):
         # RESAMPLING NOISE
         self.RESAMPLING_NOISE_X=0.1
         self.RESAMPLING_NOISE_Y=0.1
-        self.RESAMPLING_NOISE_THETA=20
+        self.RESAMPLING_NOISE_THETA=10
 
         # -- parameters for advance dynamic partical 
         self.MAX_NUMBER_OF_PARTICALS=300
@@ -225,8 +225,8 @@ class PFLocaliser(PFLocaliserBase):
                 estimated_pose.position.x += p.position.x
                 estimated_pose.position.y += p.position.y
                 estimated_pose.orientation.x += p.orientation.x
-                estimated_pose.orientation.z += p.orientation.y
-                estimated_pose.orientation.y += p.orientation.z
+                estimated_pose.orientation.y += p.orientation.y
+                estimated_pose.orientation.z += p.orientation.z
                 estimated_pose.orientation.w += p.orientation.w
                 
             length_of_partical_cloud=len(poses)
@@ -234,8 +234,8 @@ class PFLocaliser(PFLocaliserBase):
             estimated_pose.position.x /= length_of_partical_cloud
             estimated_pose.position.y /= length_of_partical_cloud
             estimated_pose.orientation.x /= length_of_partical_cloud
-            estimated_pose.orientation.z /=length_of_partical_cloud
-            estimated_pose.orientation.y /= length_of_partical_cloud
+            estimated_pose.orientation.y /=length_of_partical_cloud
+            estimated_pose.orientation.z /= length_of_partical_cloud
             estimated_pose.orientation.w /= length_of_partical_cloud
             return estimated_pose
             #end
@@ -263,17 +263,18 @@ class PFLocaliser(PFLocaliserBase):
             estimated_pose2.position.x += p[0].position.x*p[1]
             estimated_pose2.position.y += p[0].position.y*p[1]
             estimated_pose2.orientation.x += p[0].orientation.x*p[1]
-            estimated_pose2.orientation.z += p[0].orientation.y*p[1]
-            estimated_pose2.orientation.y += p[0].orientation.z*p[1]
+            estimated_pose2.orientation.y += p[0].orientation.y*p[1]
+            estimated_pose2.orientation.z +=p[0].orientation.z*p[1]
             estimated_pose2.orientation.w += p[0].orientation.w*p[1]
             sum += p[1]
             
         estimated_pose2.position.x /= sum
         estimated_pose2.position.y /= sum
         estimated_pose2.orientation.x /= sum
-        estimated_pose2.orientation.z /=sum
-        estimated_pose2.orientation.y /= sum
+        estimated_pose2.orientation.y /=sum
+        estimated_pose2.orientation.z /= sum
         estimated_pose2.orientation.w /= sum
+        #return averagePose(self.particlecloud.poses)
         return estimated_pose2
         #end
         ##better_poses=distances[:int(len(distances)/2)].sort(key=lambda tup: tup[1])
