@@ -1,3 +1,4 @@
+from pickle import TRUE
 from re import T
 import turtle
 from geometry_msgs.msg import Pose, PoseArray, Quaternion
@@ -6,7 +7,7 @@ import math
 import rospy
 
 from . util import rotateQuaternion, getHeading
-from random import random, gauss
+from random import random, gauss,uniform
 
 from time import time
 
@@ -18,31 +19,54 @@ class PFLocaliser(PFLocaliserBase):
         super(PFLocaliser, self).__init__()
         
         # -----  Odometry Parameters
-        self.ODOM_ROTATION_NOISE = 0 		# Odometry model rotation noise
-        self.ODOM_TRANSLATION_NOISE = 0 	# Odometry x axis (forward) noise
-        self.ODOM_DRIFT_NOISE = 0 			# Odometry y axis (side-side) noise
+        self.ODOM_ROTATION_NOISE = 0.000001 		# Odometry model rotation noise
+        self.ODOM_TRANSLATION_NOISE = 0.000002 	# Odometry x axis (forward) noise
+        self.ODOM_DRIFT_NOISE = 0.00000003 			# Odometry y axis (side-side) noise
 
         # ----- Set motion model parameters
         self.NUMBER_OF_PARTICALS=200
 
+        #------- Set percentage of random particals
+        self.RANDOM_PARTICAL_PERCENTAGE=5           # value between 0 to 100
+
+        #--------Set initial noise for partical cloud generation
         self.INITIAL_NOISE_X=0.3
         self.INITIAL_NOISE_Y=0.3
-        self.INITIAL_NOISE_THETA=180
+        self.INITIAL_NOISE_THETA=180    # angle in degree
         
-        # ----- Sensor model parameters
+        # ----- Sensor model
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
-        self.OCCUPANCY_THRESHOLD=70
+        
+        # ----- Map occupancy threshold
+        self.OCCUPANCY_THRESHOLD=70              # value between 0 to 100
+
+        # RESAMPLING NOISE
+        self.RESAMPLING_NOISE_X=0.1
+        self.RESAMPLING_NOISE_Y=0.1
+        self.RESAMPLING_NOISE_THETA=20
+
+        # -- parameters for advance dynamic partical 
+        self.MAX_NUMBER_OF_PARTICALS=300
+        self.MIN_NUMBER_OF_PARTICALS=50
+        self.MAX_RANDOM_PARTICAL_PERCENTAGE=20
+        self.MIN_RANDOM_PARTICAL_PERCENTAGE=5
 
     def map_position_checker(self,x,y):
-        cell_x=int(x/self.occupancy_map.info.resolution)
-        cell_y=y/self.occupancy_map.info.resolution
+        #-- converting map position to cell location
+        cell_x=int(math.floor(x/self.occupancy_map.info.resolution))
+        cell_y=int(math.floor(y/self.occupancy_map.info.resolution))
         width=self.occupancy_map.info.width
         height=self.occupancy_map.info.height
 
-        if cell_x>width or cell_x<0 or cell_y>height or cell_y <0:
+        # check if the particle is within the bounds of the map
+        if cell_x>=width or cell_x<0 or cell_y>=height or cell_y <0: #
             return False
-        if self.occupancy_map.data[cell_x+cell_y*width] > self.OCCUPANCY_THRESHOLD:
+        if cell_x+cell_y*width>len(self.occupancy_map.data):
             return False
+        # check if any obstracle is present at the location 
+        if self.occupancy_map.data[cell_x+cell_y*width] > self.OCCUPANCY_THRESHOLD: 
+            return False
+        
         return True
 
 
@@ -62,11 +86,14 @@ class PFLocaliser(PFLocaliserBase):
         """
         #adding my code here
         
+        #-- getting details about initial pose
         initial_x=initialpose.pose.pose.position.x
         initial_y=initialpose.pose.pose.position.y
         initial_theta=initialpose.pose.pose.orientation
-
+        # -- creating pose array object to return
         pose_array=PoseArray()
+
+        # -- adding guassian noise to initial pose and generating partical cloud
         for i in range(self.NUMBER_OF_PARTICALS):
             new_partical=Pose()
             while(True):
@@ -78,12 +105,9 @@ class PFLocaliser(PFLocaliserBase):
             new_partical.orientation=rotateQuaternion(initial_theta, gauss(0,1)*self.INITIAL_NOISE_THETA*math.pi/180)
             pose_array.poses.append(new_partical)
         
-        
+        # return pose array object
+        print("initial cloud created")
         return pose_array
-
-
-
-        #pass
 
  
     
@@ -96,7 +120,69 @@ class PFLocaliser(PFLocaliserBase):
             | scan (sensor_msgs.msg.LaserScan): laser scan to use for update
 
          """
-        pass
+        #adding my code here
+        #---- Getting weights for all the particals
+        weights=[]
+        for partical in self.particlecloud.poses:
+            weights.append(self.sensor_model.get_weight(scan,partical))
+        
+
+        #--  Normalising the weights
+        sum_of_weight=sum(weights)
+        weights=[i/sum_of_weight for i in weights]
+
+        #-- cumulitive density function list
+        cdf=[]
+        cdf.append(weights[0])
+        for i in range(1,len(weights)):
+            cdf.append(cdf[i-1]+weights[i])
+
+        #-- Resampling algorithm
+        M=self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)
+        #print("creating %d particals in resampling"%M)
+        inverse_of_M=1/M
+        resampled=[]
+        U=0
+        while U==0:
+            U=uniform(0,inverse_of_M)
+        K=0
+        for j in range(M):
+            while(U>cdf[K]):
+                K+=1
+            resampled.append(self.particlecloud.poses[K])
+            U=U+inverse_of_M
+        
+        # adding gaussian noise to each partical
+        #print("resampled before adding noise")
+        #print(resampled)
+        update_array=[]
+        for i in range(len(resampled)):
+            noise_added_partical=Pose()
+            while(True):
+                noise_added_partical.position.x=(resampled[i].position.x+gauss(0,1)*self.RESAMPLING_NOISE_X)
+                noise_added_partical.position.y=(resampled[i].position.y+gauss(0,1)*self.RESAMPLING_NOISE_Y)
+                if self.map_position_checker(noise_added_partical.position.x,noise_added_partical.position.y):
+                    break
+            noise_added_partical.orientation=rotateQuaternion(resampled[i].orientation, gauss(0,1)*self.RESAMPLING_NOISE_THETA*math.pi/180)
+            update_array.append(noise_added_partical)      
+        # # adding the random particals all across the map
+
+        for i in range(int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)):
+            random_partical=Pose()
+            while True:
+                random_partical.position.x=uniform(0,self.occupancy_map.info.width)
+                random_partical.position.y=uniform(0,self.occupancy_map.info.height)
+                if self.map_position_checker(random_partical.position.x,random_partical.position.y):
+                    break
+            random_partical.orientation.w=1
+            random_partical.orientation=rotateQuaternion(random_partical.orientation,uniform(0,1)*self.INITIAL_NOISE_THETA*math.pi/180)
+            update_array.append(random_partical)
+        
+        # print("cloud is updated new cloud has %d particals"%len(resampled))
+        # #print(resampled)
+        self.particlecloud.poses=update_array
+        return True
+
 
     def estimate_pose(self):
         """
@@ -114,4 +200,24 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
-        pass
+        # Simple average
+        estimated_pose = Pose()        
+
+        for p in self.particlecloud.poses:
+            estimated_pose.position.x += p.position.x
+            estimated_pose.position.y += p.position.y
+            estimated_pose.orientation.x += p.orientation.x
+            estimated_pose.orientation.z += p.orientation.y
+            estimated_pose.orientation.y += p.orientation.z
+            estimated_pose.orientation.w += p.orientation.w
+            
+        length_of_partical_cloud=len(self.particlecloud.poses)
+
+        estimated_pose.position.x /= length_of_partical_cloud
+        estimated_pose.position.y /= length_of_partical_cloud
+        estimated_pose.orientation.x /= length_of_partical_cloud
+        estimated_pose.orientation.z /=length_of_partical_cloud
+        estimated_pose.orientation.y /= length_of_partical_cloud
+        estimated_pose.orientation.w /= length_of_partical_cloud
+
+        return estimated_pose
