@@ -213,9 +213,6 @@ class PFLocaliser(PFLocaliserBase):
         # poses_for_estimation=[]
         # for i in range(self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)):
         #     poses_for_estimation.append(self.particlecloud.poses)
-        
-
-
 
         # Simple average
         def averagePose(poses):
@@ -241,12 +238,12 @@ class PFLocaliser(PFLocaliserBase):
             return estimated_pose
             #end
         
-
+        #weight-array
         estimated_pose = averagePose(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])       
 
         distances = []
         for p in self.particlecloud.poses:
-            distances.append((p,(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
+            distances.append((p,weights_array,position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
         distances.sort(key=lambda tup: tup[1])
 
         better_poses =[]
