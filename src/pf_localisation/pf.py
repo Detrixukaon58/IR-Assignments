@@ -254,5 +254,26 @@ class PFLocaliser(PFLocaliserBase):
         for i in range(int(len(distances)/2)):
             better_poses.append(distances[i])
         better_poses.sort(key=lambda tup: tup[1])
+
+    
+        estimated_pose2 = Pose()    
+        sum=0    
+
+        for p in better_poses:
+            estimated_pose2.position.x += p[0].position.x*p[1]
+            estimated_pose2.position.y += p[0].position.y*p[1]
+            estimated_pose2.orientation.x += p[0].orientation.x*p[1]
+            estimated_pose2.orientation.z += p[0].orientation.y*p[1]
+            estimated_pose2.orientation.y += p[0].orientation.z*p[1]
+            estimated_pose2.orientation.w += p[0].orientation.w*p[1]
+            sum += p[1]
+            
+        estimated_pose2.position.x /= sum
+        estimated_pose2.position.y /= sum
+        estimated_pose2.orientation.x /= sum
+        estimated_pose2.orientation.z /=sum
+        estimated_pose2.orientation.y /= sum
+        estimated_pose2.orientation.w /= sum
+        return estimated_pose2
+        #end
         ##better_poses=distances[:int(len(distances)/2)].sort(key=lambda tup: tup[1])
-        return better_poses[0][0]
