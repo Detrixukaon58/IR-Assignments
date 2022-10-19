@@ -184,6 +184,29 @@ class PFLocaliser(PFLocaliserBase):
         return True
 
 
+    def averagePose(poses):
+        estimated_pose = Pose()        
+
+        for p in poses:
+            estimated_pose.position.x += p.position.x
+            estimated_pose.position.y += p.position.y
+            estimated_pose.orientation.x += p.orientation.x
+            estimated_pose.orientation.z += p.orientation.y
+            estimated_pose.orientation.y += p.orientation.z
+            estimated_pose.orientation.w += p.orientation.w
+            
+        length_of_partical_cloud=len(poses)
+
+        estimated_pose.position.x /= length_of_partical_cloud
+        estimated_pose.position.y /= length_of_partical_cloud
+        estimated_pose.orientation.x /= length_of_partical_cloud
+        estimated_pose.orientation.z /=length_of_partical_cloud
+        estimated_pose.orientation.y /= length_of_partical_cloud
+        estimated_pose.orientation.w /= length_of_partical_cloud
+        
+        return estimated_pose
+        #end
+
     def estimate_pose(self):
         """
         This should calculate and return an updated robot pose estimate based
@@ -200,24 +223,17 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
+
         # Simple average
-        estimated_pose = Pose()        
+        estimated_pose = averagePose(self.particlecloud.poses)       
 
+        distances = []
         for p in self.particlecloud.poses:
-            estimated_pose.position.x += p.position.x
-            estimated_pose.position.y += p.position.y
-            estimated_pose.orientation.x += p.orientation.x
-            estimated_pose.orientation.z += p.orientation.y
-            estimated_pose.orientation.y += p.orientation.z
-            estimated_pose.orientation.w += p.orientation.w
-            
-        length_of_partical_cloud=len(self.particlecloud.poses)
+            distances.append((p,(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
+        distances.sort(key=lambda tup: tup[1])
 
-        estimated_pose.position.x /= length_of_partical_cloud
-        estimated_pose.position.y /= length_of_partical_cloud
-        estimated_pose.orientation.x /= length_of_partical_cloud
-        estimated_pose.orientation.z /=length_of_partical_cloud
-        estimated_pose.orientation.y /= length_of_partical_cloud
-        estimated_pose.orientation.w /= length_of_partical_cloud
-
-        return estimated_pose
+        better_poses =[]
+        for i in range(len(distances)/2):
+            better_poses.append(distances[i][0])
+        
+        return averagePose(better_poses)
