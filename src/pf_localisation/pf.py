@@ -51,6 +51,9 @@ class PFLocaliser(PFLocaliserBase):
         self.MAX_RANDOM_PARTICAL_PERCENTAGE=20
         self.MIN_RANDOM_PARTICAL_PERCENTAGE=5
 
+        #-- weights array for estimate pose function
+        self.weights_array=[]
+
     def map_position_checker(self,x,y):
         #-- converting map position to cell location
         cell_x=int(math.floor(x/self.occupancy_map.info.resolution))
@@ -126,6 +129,7 @@ class PFLocaliser(PFLocaliserBase):
         for partical in self.particlecloud.poses:
             weights.append(self.sensor_model.get_weight(scan,partical))
         
+        self.weights_array=weights
 
         #--  Normalising the weights
         sum_of_weight=sum(weights)
@@ -184,28 +188,8 @@ class PFLocaliser(PFLocaliserBase):
         return True
 
 
-    def averagePose(poses):
-        estimated_pose = Pose()        
 
-        for p in poses:
-            estimated_pose.position.x += p.position.x
-            estimated_pose.position.y += p.position.y
-            estimated_pose.orientation.x += p.orientation.x
-            estimated_pose.orientation.z += p.orientation.y
-            estimated_pose.orientation.y += p.orientation.z
-            estimated_pose.orientation.w += p.orientation.w
-            
-        length_of_partical_cloud=len(poses)
-
-        estimated_pose.position.x /= length_of_partical_cloud
-        estimated_pose.position.y /= length_of_partical_cloud
-        estimated_pose.orientation.x /= length_of_partical_cloud
-        estimated_pose.orientation.z /=length_of_partical_cloud
-        estimated_pose.orientation.y /= length_of_partical_cloud
-        estimated_pose.orientation.w /= length_of_partical_cloud
         
-        return estimated_pose
-        #end
 
     def estimate_pose(self):
         """
@@ -224,8 +208,41 @@ class PFLocaliser(PFLocaliserBase):
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
 
+
+        # estimate pose ignoring random particals that we have genretated at the end of update function
+        # poses_for_estimation=[]
+        # for i in range(self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)):
+        #     poses_for_estimation.append(self.particlecloud.poses)
+        
+
+
+
         # Simple average
-        estimated_pose = averagePose(self.particlecloud.poses)       
+        def averagePose(poses):
+
+            estimated_pose = Pose()        
+
+            for p in poses:
+                estimated_pose.position.x += p.position.x
+                estimated_pose.position.y += p.position.y
+                estimated_pose.orientation.x += p.orientation.x
+                estimated_pose.orientation.z += p.orientation.y
+                estimated_pose.orientation.y += p.orientation.z
+                estimated_pose.orientation.w += p.orientation.w
+                
+            length_of_partical_cloud=len(poses)
+
+            estimated_pose.position.x /= length_of_partical_cloud
+            estimated_pose.position.y /= length_of_partical_cloud
+            estimated_pose.orientation.x /= length_of_partical_cloud
+            estimated_pose.orientation.z /=length_of_partical_cloud
+            estimated_pose.orientation.y /= length_of_partical_cloud
+            estimated_pose.orientation.w /= length_of_partical_cloud
+            return estimated_pose
+            #end
+        
+
+        estimated_pose = averagePose(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])       
 
         distances = []
         for p in self.particlecloud.poses:
@@ -233,7 +250,7 @@ class PFLocaliser(PFLocaliserBase):
         distances.sort(key=lambda tup: tup[1])
 
         better_poses =[]
-        for i in range(len(distances)/2):
+        for i in range(int(len(distances)/2)):
             better_poses.append(distances[i][0])
         
         return averagePose(better_poses)
