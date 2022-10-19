@@ -169,6 +169,8 @@ class PFLocaliser(PFLocaliserBase):
                     break
             noise_added_partical.orientation=rotateQuaternion(resampled[i].orientation, gauss(0,1)*self.RESAMPLING_NOISE_THETA*math.pi/180)
             update_array.append(noise_added_partical)      
+
+
         # # adding the random particals all across the map
 
         for i in range(int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)):
@@ -239,17 +241,18 @@ class PFLocaliser(PFLocaliserBase):
             #end
         
         #weight-array
-        estimated_pose = averagePose(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])       
-
+        # estimated_pose = averagePose(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])       
+        estimated_pose = averagePose(self.particlecloud.poses)
         distances = []
+        # for i in range(len(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])):
         for i in range(len(self.particlecloud.poses)):
             p = self.particlecloud.poses[i]
-            distances.append((p,weights_array[i],(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
+            distances.append((p,self.weights_array[i],(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
         distances.sort(key=lambda tup: tup[2])
 
-        ##better_poses =[]
-        ##for i in range(int(len(distances)/2)):
-        ##    better_poses.append(distances[i][0:1]
-        
-        better_poses=distances[0:int(len(distances)/2)].sort(key=lambda tup: tup[1])
-        return averagePose(better_poses[0][0])
+        better_poses =[]
+        for i in range(int(len(distances)/2)):
+            better_poses.append(distances[i])
+        better_poses.sort(key=lambda tup: tup[1])
+        ##better_poses=distances[:int(len(distances)/2)].sort(key=lambda tup: tup[1])
+        return better_poses[0][0]
