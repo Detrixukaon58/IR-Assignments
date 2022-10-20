@@ -11,6 +11,8 @@ from random import random, gauss,uniform
 
 from time import time
 
+import matplotlib.pyplot as plt
+
 
 class PFLocaliser(PFLocaliserBase):
        
@@ -24,14 +26,14 @@ class PFLocaliser(PFLocaliserBase):
         self.ODOM_DRIFT_NOISE = 0.00000003 			# Odometry y axis (side-side) noise
 
         # ----- Set motion model parameters
-        self.NUMBER_OF_PARTICALS=200
+        self.NUMBER_OF_PARTICALS=200           # NUmber of particals in the starting this parameter is dynamic
 
         #------- Set percentage of random particals
         self.RANDOM_PARTICAL_PERCENTAGE=5           # value between 0 to 100
 
         #--------Set initial noise for partical cloud generation
-        self.INITIAL_NOISE_X=0.3
-        self.INITIAL_NOISE_Y=0.3
+        self.INITIAL_NOISE_X=0.3        # maximum noise in X direction
+        self.INITIAL_NOISE_Y=0.3        # maximum noise in Y direction
         self.INITIAL_NOISE_THETA=180    # angle in degree
         
         # ----- Sensor model
@@ -40,12 +42,12 @@ class PFLocaliser(PFLocaliserBase):
         # ----- Map occupancy threshold
         self.OCCUPANCY_THRESHOLD=70              # value between 0 to 100
 
-        # RESAMPLING NOISE
-        self.RESAMPLING_NOISE_X=0.1
-        self.RESAMPLING_NOISE_Y=0.1
+        # ------ RESAMPLING NOISE
+        self.RESAMPLING_NOISE_X=0.1           
+        self.RESAMPLING_NOISE_Y=0.1            
         self.RESAMPLING_NOISE_THETA=10
 
-        # -- parameters for advance dynamic partical 
+        # --- parameters for advance dynamic partical 
         self.MAX_NUMBER_OF_PARTICALS=300
         self.MIN_NUMBER_OF_PARTICALS=50
         self.MAX_RANDOM_PARTICAL_PERCENTAGE=20
@@ -53,6 +55,10 @@ class PFLocaliser(PFLocaliserBase):
 
         #-- weights array for estimate pose function
         self.weights_array=[]
+
+        #-- parameters for dynamic number of partical change
+        self.threshold_for_dynamic_partical_number_change=4.5
+        
 
     def map_position_checker(self,x,y):
         #-- converting map position to cell location
@@ -87,12 +93,12 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.PoseArray) poses of the particles
         """
-        #adding my code here
         
         #-- getting details about initial pose
         initial_x=initialpose.pose.pose.position.x
         initial_y=initialpose.pose.pose.position.y
         initial_theta=initialpose.pose.pose.orientation
+
         # -- creating pose array object to return
         pose_array=PoseArray()
 
@@ -104,11 +110,10 @@ class PFLocaliser(PFLocaliserBase):
                 new_partical.position.y=initial_y+gauss(0,1)*self.INITIAL_NOISE_Y
                 if self.map_position_checker(new_partical.position.x,new_partical.position.y):
                     break
-        
             new_partical.orientation=rotateQuaternion(initial_theta, gauss(0,1)*self.INITIAL_NOISE_THETA*math.pi/180)
             pose_array.poses.append(new_partical)
         
-        # return pose array object
+        #--- return pose array object
         print("initial cloud created")
         return pose_array
 
@@ -123,7 +128,6 @@ class PFLocaliser(PFLocaliserBase):
             | scan (sensor_msgs.msg.LaserScan): laser scan to use for update
 
          """
-        #adding my code here
         #---- Getting weights for all the particals
         weights=[]
         for partical in self.particlecloud.poses:
@@ -131,8 +135,27 @@ class PFLocaliser(PFLocaliserBase):
         
         self.weights_array=weights
 
-        #--  Normalising the weights
+        #--  Sum of all the weights
         sum_of_weight=sum(weights)
+
+        #---- Dynamic changes in the number of particals and random partical percentage
+        if((sum_of_weight/self.NUMBER_OF_PARTICALS) > self.threshold_for_dynamic_partical_number_change):
+            if self.NUMBER_OF_PARTICALS > self.MIN_NUMBER_OF_PARTICALS:
+                self.NUMBER_OF_PARTICALS-=1
+            if self.RANDOM_PARTICAL_PERCENTAGE > self.MIN_RANDOM_PARTICAL_PERCENTAGE:
+                self.RANDOM_PARTICAL_PERCENTAGE-=1
+        else:
+            if self.NUMBER_OF_PARTICALS < self.MAX_NUMBER_OF_PARTICALS:
+                self.NUMBER_OF_PARTICALS+=1
+            if self.RANDOM_PARTICAL_PERCENTAGE < self.MAX_RANDOM_PARTICAL_PERCENTAGE:
+                self.RANDOM_PARTICAL_PERCENTAGE+=1
+
+
+
+        print("particals=%d "%self.NUMBER_OF_PARTICALS)
+        print("random percentage=%d"%self.RANDOM_PARTICAL_PERCENTAGE)
+        
+        #---- Normalising weights
         weights=[i/sum_of_weight for i in weights]
 
         #-- cumulitive density function list
@@ -143,7 +166,6 @@ class PFLocaliser(PFLocaliserBase):
 
         #-- Resampling algorithm
         M=self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)
-        #print("creating %d particals in resampling"%M)
         inverse_of_M=1/M
         resampled=[]
         U=0
@@ -156,9 +178,7 @@ class PFLocaliser(PFLocaliserBase):
             resampled.append(self.particlecloud.poses[K])
             U=U+inverse_of_M
         
-        # adding gaussian noise to each partical
-        #print("resampled before adding noise")
-        #print(resampled)
+        #--- adding gaussian noise to each partical
         update_array=[]
         for i in range(len(resampled)):
             noise_added_partical=Pose()
@@ -171,8 +191,7 @@ class PFLocaliser(PFLocaliserBase):
             update_array.append(noise_added_partical)      
 
 
-        # # adding the random particals all across the map
-
+        #-- adding the random particals all across the map
         for i in range(int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)):
             random_partical=Pose()
             while True:
@@ -184,8 +203,7 @@ class PFLocaliser(PFLocaliserBase):
             random_partical.orientation=rotateQuaternion(random_partical.orientation,uniform(0,1)*self.INITIAL_NOISE_THETA*math.pi/180)
             update_array.append(random_partical)
         
-        # print("cloud is updated new cloud has %d particals"%len(resampled))
-        # #print(resampled)
+        #--- update partical cloud
         self.particlecloud.poses=update_array
         return True
 
@@ -211,12 +229,7 @@ class PFLocaliser(PFLocaliserBase):
          """
 
 
-        # estimate pose ignoring random particals that we have genretated at the end of update function
-        # poses_for_estimation=[]
-        # for i in range(self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)):
-        #     poses_for_estimation.append(self.particlecloud.poses)
-
-        # Simple average
+        # Simple average function for position
         def averagePose(poses):
 
             estimated_pose = Pose()        
@@ -240,22 +253,26 @@ class PFLocaliser(PFLocaliserBase):
             return estimated_pose
             #end
         
-        #weight-array
-        # estimated_pose = averagePose(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])       
+       # taking estimated pose from all the particals
         estimated_pose = averagePose(self.particlecloud.poses)
-        distances = []
-        # for i in range(len(self.particlecloud.poses[0:self.NUMBER_OF_PARTICALS-int(self.NUMBER_OF_PARTICALS*self.RANDOM_PARTICAL_PERCENTAGE/100)])):
+        
+        #---measuring distance of each partical from the average partical
+        distances = []        
         for i in range(len(self.particlecloud.poses)):
             p = self.particlecloud.poses[i]
-            distances.append((p,self.weights_array[i],(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
+            if i < len(self.weights_array):
+                distances.append((p,self.weights_array[i],(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
+            else:
+                distances.append((p,0,(p.position.x-estimated_pose.position.x)**2+(p.position.y-estimated_pose.position.y)**2))
         distances.sort(key=lambda tup: tup[2])
 
+        #--- taking poses which are close to main pose
         better_poses =[]
         for i in range(int(len(distances)/2)):
             better_poses.append(distances[i])
         better_poses.sort(key=lambda tup: tup[1])
 
-    
+        #-- estimating the main pose
         estimated_pose2 = Pose()    
         sum=0    
 
@@ -274,7 +291,7 @@ class PFLocaliser(PFLocaliserBase):
         estimated_pose2.orientation.y /=sum
         estimated_pose2.orientation.z /= sum
         estimated_pose2.orientation.w /= sum
-        #return averagePose(self.particlecloud.poses)
+        
+        
         return estimated_pose2
-        #end
-        ##better_poses=distances[:int(len(distances)/2)].sort(key=lambda tup: tup[1])
+       
